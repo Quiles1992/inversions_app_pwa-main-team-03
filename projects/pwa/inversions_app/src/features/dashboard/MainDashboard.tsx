@@ -1,5 +1,5 @@
-// FIC: Main operational dashboard — Revolut layout with DashboardLayout, NavBar with Badge, and evidence Drawer.
-// FIC: Dashboard operativo principal — layout Revolut con DashboardLayout, NavBar con Badge y Drawer de evidencia.
+// FIC: Main operational dashboard — AppShell 4-zone layout with ActivityBar, LeftPanel, and ChatPanel.
+// FIC: Dashboard operativo principal — layout AppShell de 4 zonas con ActivityBar, LeftPanel y ChatPanel.
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
@@ -11,19 +11,22 @@ import { CoreSelector, type CoreDefinition } from "./CoreSelector";
 import { SignalOverlay } from "./SignalOverlay";
 import { ExplainabilityTable } from "./ExplainabilityTable";
 import { SignalEvidencePanel } from "../signals/SignalEvidencePanel";
-import { WatchlistTree } from "./WatchlistTree";
 import { SuperChart } from "./SuperChart";
 import { TimeControls } from "./TimeControls";
 import { IndicatorsMenu } from "./IndicatorsMenu";
 import { RuntimeModeSwitches } from "./RuntimeModeSwitches";
 import { ConfluenceSignalsTable } from "./ConfluenceSignalsTable";
 import { SimulationControlPanel } from "./simulation/SimulationControlPanel";
-import { DashboardLayout } from "../../layouts/DashboardLayout";
+import { AppShell } from "../../layouts/AppShell";
+import { ActivityBar } from "../../components/ui/ActivityBar";
+import { LeftPanel } from "../sidebar/LeftPanel";
+import { ChatPanel } from "../chat/ChatPanel";
 import { Badge } from "../../components/ui/Badge";
 import { SkeletonCard } from "../../components/ui/SkeletonCard";
 import { Drawer } from "../../components/ui/Drawer";
 import type { ConfluenceSignalRow, SimulationResponse } from "../../services/signals/confluenceTableApi";
 import { useSignalStore } from "../../store/signals";
+import { useAppShellStore } from "../../store/appShell";
 
 const initialCores: CoreDefinition[] = [
   { id: "technical", label: "Technical", description: "Momentum y estructura", enabled: true },
@@ -46,10 +49,19 @@ export function MainDashboard() {
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [simulationRows, setSimulationRows] = useState<ConfluenceSignalRow[] | undefined>(undefined);
   const [simulationVerdict, setSimulationVerdict] = useState<any | null>(null);
-  const [drawerOpen, setDrawerOpen] = useState(false);
   const [evidenceDrawerOpen, setEvidenceDrawerOpen] = useState(false);
   const [evidenceSignal, setEvidenceSignal] = useState<DashboardSignalCard | null>(null);
   const { selectedInstrument, selectedSignal: storeSelectedRow, runtimeMode, operationalMode } = useSignalStore();
+  const { analysisCategory } = useAppShellStore();
+
+  // FIC: Map analysis category chips to visible dashboard sections.
+  // FIC: Mapeo de chips de categoría de análisis a secciones visibles del dashboard.
+  const showTechnical = ["technical", "ai"].includes(analysisCategory);
+  const showOptions = ["options", "technical"].includes(analysisCategory);
+  const showAI = ["ai", "technical"].includes(analysisCategory);
+  const showInstitutional = analysisCategory === "institutional";
+  const showFundamental = analysisCategory === "fundamental";
+  const showNews = analysisCategory === "news";
 
   const handleSimulationResult = useCallback((result: SimulationResponse) => {
     setSimulationRows(result.table);
@@ -76,6 +88,7 @@ export function MainDashboard() {
 
   useEffect(() => {
     void refreshDashboard();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const toggleCore = (coreId: string) => {
@@ -94,53 +107,39 @@ export function MainDashboard() {
     operationalMode === "real" ? "Real" :
     "Demo";
 
-  const nav = (
-    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: "var(--space-sm)" }}>
-        {/* Hamburger for tablet */}
-        <button
-          className="drawer-toggle"
-          onClick={() => setDrawerOpen(true)}
-          aria-label="Abrir watchlist"
-          style={{
-            background: "none",
-            border: "none",
-            color: "var(--color-text-muted)",
-            cursor: "pointer",
-            fontSize: "1.25rem",
-            display: "none"
-          }}
-        >
-          ☰
-        </button>
-        <Badge label="FIC" color="var(--color-accent)" size="sm" />
-        <span style={{ fontWeight: "var(--font-weight-bold)", fontSize: "var(--font-size-base)" }}>Inversions</span>
-        <span style={{ color: "var(--color-text-muted)", fontSize: "var(--font-size-sm)" }}>Dashboard de Confluencia</span>
-      </div>
-      <div style={{ display: "flex", alignItems: "center", gap: "var(--space-md)" }}>
-        <Badge
-          label={modeBadgeLabel}
-          color={modeBadgeColor}
-          pulse={operationalMode === "real" && runtimeMode !== "offline"}
-        />
-        {lastUpdated && (
-          <span style={{ color: "var(--color-text-muted)", fontSize: "var(--font-size-xs)" }}>
-            Actualizado: {lastUpdated.toLocaleTimeString()}
-          </span>
-        )}
-      </div>
-      <style>{`
-        @media (max-width: 1023px) {
-          .drawer-toggle { display: block !important; }
-        }
-      `}</style>
+  // FIC: "En construcción" block shown for categories without dashboard sections yet.
+  // FIC: Bloque "En construcción" para categorías sin secciones del dashboard disponibles aún.
+  const ComingSoonBlock = ({ category }: { category: string }) => (
+    <div style={{ textAlign: "center", padding: "4rem 2rem", color: "var(--color-text-muted)" }}>
+      <div style={{ fontSize: "2rem", marginBottom: "0.75rem" }}>🚧</div>
+      <p style={{ fontWeight: "var(--font-weight-emphasis)" }}>Esta sección estará disponible próximamente</p>
+      <p style={{ fontSize: "var(--font-size-sm)", marginTop: "0.5rem" }}>Categoría: {category}</p>
     </div>
   );
 
-  const sidebar = <WatchlistTree />;
-
   const mainContent = (
-    <div style={{ display: "grid", gap: "var(--space-lg)" }}>
+    <div style={{ padding: "var(--space-lg)", display: "grid", gap: "var(--space-lg)" }}>
+      {/* ── Nav bar row */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "var(--space-sm)" }}>
+          <Badge label="FIC" color="var(--color-accent)" size="sm" />
+          <span style={{ fontWeight: "var(--font-weight-bold)", fontSize: "var(--font-size-base)" }}>Inversions</span>
+          <span style={{ color: "var(--color-text-muted)", fontSize: "var(--font-size-sm)" }}>Dashboard de Confluencia</span>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: "var(--space-md)" }}>
+          <Badge
+            label={modeBadgeLabel}
+            color={modeBadgeColor}
+            pulse={operationalMode === "real" && runtimeMode !== "offline"}
+          />
+          {lastUpdated && (
+            <span style={{ color: "var(--color-text-muted)", fontSize: "var(--font-size-xs)" }}>
+              Actualizado: {lastUpdated.toLocaleTimeString()}
+            </span>
+          )}
+        </div>
+      </div>
+
       {/* ── Filter bar */}
       <div className="card">
         <div style={{ display: "grid", gridTemplateColumns: "1fr auto auto auto", gap: "var(--space-sm)", alignItems: "end" }}>
@@ -169,10 +168,10 @@ export function MainDashboard() {
         </div>
       </div>
 
-      {/* ── Core selector */}
+      {/* ── Core selector — always visible */}
       <CoreSelector cores={cores} onToggle={toggleCore} />
 
-      {/* ── Runtime and chart controls */}
+      {/* ── Runtime and chart controls — always visible */}
       {!isTestEnv && (
         <div style={{ display: "grid", gap: "var(--space-sm)" }}>
           <RuntimeModeSwitches />
@@ -194,7 +193,7 @@ export function MainDashboard() {
         </div>
       )}
 
-      {/* ── Loading skeleton — FR-005 */}
+      {/* ── Loading skeleton */}
       {loading && !payload && (
         <div style={{ display: "grid", gap: "var(--space-sm)", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))" }}>
           {[1, 2, 3, 4].map((n) => <SkeletonCard key={n} height={110} lines={3} />)}
@@ -204,6 +203,9 @@ export function MainDashboard() {
       {/* ── Payload views */}
       {payload && (
         <div style={{ display: "grid", gap: "var(--space-lg)" }}>
+
+          {/* FIC: SuperChart + simulation — always visible regardless of analysisCategory. */}
+          {/* FIC: SuperChart + simulación — siempre visible independientemente de analysisCategory. */}
           {!isTestEnv && (
             <div style={{ display: "grid", gap: "var(--space-md)", gridTemplateColumns: "1fr" }}>
               <div className="card" style={{ minHeight: 380 }}>
@@ -219,49 +221,68 @@ export function MainDashboard() {
                   </span>
                 </div>
               )}
-              <ConfluenceSignalsTable symbol={selectedSymbol} rows={simulationRows} />
             </div>
           )}
 
-          {/* FIC: Signal cards — clicking opens evidence drawer (US3). */}
-          {/* FIC: Tarjetas de señal — clic abre drawer de evidencia (US3). */}
-          <SignalOverlay
-            cards={payload.cards}
-            onCardClick={(card) => {
-              setEvidenceSignal(card);
-              setEvidenceDrawerOpen(true);
-            }}
-          />
-          <ExplainabilityTable cards={payload.cards} />
-
-          {/* ── Inline evidence (test env fallback) */}
-          <div className="card">
-            <div style={{ marginBottom: "0.75rem", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-              <h2>Detalle de evidencia</h2>
-              <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-                {payload.cards.map((card) => (
-                  <button
-                    key={card.signalId}
-                    className={`btn-ghost ${selectedSignal?.signalId === card.signalId ? "active" : ""}`}
-                    onClick={() => setSelectedSignal(card)}
-                  >
-                    {card.instrument}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <SignalEvidencePanel evidence={selectedSignal?.evidence ?? []} />
-            {storeSelectedRow && Array.isArray((storeSelectedRow.metadata as any)?.evidencia_refs) && (
-              <div style={{ marginTop: "0.75rem", padding: "0.5rem 0.75rem", border: "1px solid var(--color-border)", borderRadius: "var(--radius-sm)" }}>
-                <strong style={{ fontSize: "0.8rem" }}>Evidencia de la fila seleccionada</strong>
-                <ul style={{ margin: "0.4rem 0 0 1rem", padding: 0, fontSize: "0.75rem" }}>
-                  {((storeSelectedRow.metadata as any).evidencia_refs as string[]).map((ref, i) => (
-                    <li key={`${ref}-${i}`}>{ref}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
+          {/* FIC: Confluence table — visible for technical, options, institutional and AI. */}
+          {/* FIC: Tabla de confluencia — visible para técnico, opciones, institucional e IA. */}
+          <div style={{ display: (showTechnical || showOptions || showInstitutional || showAI) ? "" : "none" }}>
+            <ConfluenceSignalsTable symbol={selectedSymbol} rows={simulationRows} />
           </div>
+
+          {/* FIC: Signal overlay and explainability — technical and AI categories. */}
+          {/* FIC: Overlay de señales y explicabilidad — categorías técnico e IA. */}
+          <div style={{ display: (showTechnical || showAI) ? "" : "none" }}>
+            <SignalOverlay
+              cards={payload.cards}
+              onCardClick={(card) => {
+                setEvidenceSignal(card);
+                setEvidenceDrawerOpen(true);
+              }}
+            />
+          </div>
+
+          {/* FIC: AI explainability table — visible for technical and AI categories. */}
+          {/* FIC: Tabla de explicabilidad IA — visible para categorías técnico e IA. */}
+          <div style={{ display: showAI ? "" : "none" }}>
+            <ExplainabilityTable cards={payload.cards} />
+          </div>
+
+          {/* FIC: Inline evidence — test env only; Drawer handles production evidence display. */}
+          {/* FIC: Evidencia inline — solo en test; el Drawer maneja la evidencia en producción. */}
+          {isTestEnv && (
+            <div className="card">
+              <div style={{ marginBottom: "0.75rem", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <h2>Detalle de evidencia</h2>
+                <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+                  {payload.cards.map((card) => (
+                    <button
+                      key={card.signalId}
+                      className={`btn-ghost ${selectedSignal?.signalId === card.signalId ? "active" : ""}`}
+                      onClick={() => setSelectedSignal(card)}
+                    >
+                      {card.instrument}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <SignalEvidencePanel evidence={selectedSignal?.evidence ?? []} />
+              {storeSelectedRow && Array.isArray((storeSelectedRow.metadata as any)?.evidencia_refs) && (
+                <div style={{ marginTop: "0.75rem", padding: "0.5rem 0.75rem", border: "1px solid var(--color-border)", borderRadius: "var(--radius-sm)" }}>
+                  <strong style={{ fontSize: "0.8rem" }}>Evidencia de la fila seleccionada</strong>
+                  <ul style={{ margin: "0.4rem 0 0 1rem", padding: 0, fontSize: "0.75rem" }}>
+                    {((storeSelectedRow.metadata as any).evidencia_refs as string[]).map((ref, i) => (
+                      <li key={`${ref}-${i}`}>{ref}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── Coming soon for Fundamental and News */}
+          {showFundamental && <ComingSoonBlock category="Fundamental" />}
+          {showNews && <ComingSoonBlock category="Noticias" />}
         </div>
       )}
 
@@ -276,16 +297,15 @@ export function MainDashboard() {
 
   return (
     <>
-      <DashboardLayout
-        nav={nav}
-        sidebar={sidebar}
+      <AppShell
+        activityBar={<ActivityBar />}
+        leftPanel={<LeftPanel />}
         main={mainContent}
-        drawerOpen={drawerOpen}
-        onDrawerClose={() => setDrawerOpen(false)}
+        chatPanel={<ChatPanel />}
       />
 
-      {/* FIC: Evidence drawer — slide-in from right, opens on signal card click (US3). */}
-      {/* FIC: Drawer de evidencia — desliza desde la derecha, se abre al clic en tarjeta de señal (US3). */}
+      {/* FIC: Evidence drawer — slide-in from right, opens on signal card click. */}
+      {/* FIC: Drawer de evidencia — desliza desde la derecha, se abre al clic en tarjeta de señal. */}
       <Drawer
         isOpen={evidenceDrawerOpen}
         onClose={() => setEvidenceDrawerOpen(false)}

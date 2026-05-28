@@ -74,6 +74,11 @@
   --nav-height: 64px;
   --sidebar-width: 280px;
   --drawer-width: 320px;
+
+  /* AppShell — Feature 005 */
+  --activity-bar-width: 48px;
+  --left-panel-width: 280px;
+  --chat-panel-width: 360px;
 }
 
 @media (prefers-color-scheme: light) {

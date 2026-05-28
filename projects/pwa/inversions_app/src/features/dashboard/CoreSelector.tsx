@@ -28,10 +28,14 @@ export function CoreSelector({ cores, onToggle }: CoreSelectorProps) {
       <h2 style={{ marginBottom: "0.75rem" }}>Cores analíticos</h2>
       <div style={{ display: "grid", gap: "var(--space-sm)", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))" }}>
         {cores.map((core) => (
-          <label
+          <button
             key={core.id}
+            onClick={() => onToggle(core.id)}
+            aria-pressed={core.enabled}
             style={{
               display: "block",
+              width: "100%",
+              textAlign: "left",
               background: core.enabled ? "var(--color-accent-subtle)" : "var(--color-surface-raised)",
               border: `1px solid ${core.enabled ? "var(--color-accent)" : "var(--color-border)"}`,
               borderRadius: "var(--radius-md)",
@@ -41,12 +45,6 @@ export function CoreSelector({ cores, onToggle }: CoreSelectorProps) {
             }}
           >
             <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-              <input
-                type="checkbox"
-                checked={core.enabled}
-                onChange={() => onToggle(core.id)}
-                style={{ width: 14, height: 14, accentColor: "var(--color-accent)", cursor: "pointer" }}
-              />
               <strong style={{
                 color: core.enabled ? "var(--color-text)" : "var(--color-text-muted)",
                 fontSize: "var(--font-size-sm)",
@@ -71,10 +69,10 @@ export function CoreSelector({ cores, onToggle }: CoreSelectorProps) {
                 {core.enabled ? "SI" : "NO"}
               </span>
             </div>
-            <p style={{ marginTop: "0.3rem", fontSize: "var(--font-size-xs)", paddingLeft: "1.4rem", color: "var(--color-text-muted)" }}>
+            <p style={{ marginTop: "0.3rem", fontSize: "var(--font-size-xs)", color: "var(--color-text-muted)" }}>
               {core.description}
             </p>
-          </label>
+          </button>
         ))}
       </div>
     </section>

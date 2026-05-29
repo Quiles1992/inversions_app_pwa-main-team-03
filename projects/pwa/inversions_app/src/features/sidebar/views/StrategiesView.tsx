@@ -119,7 +119,7 @@ const FALLBACK_INSTRUMENTS: InstrumentCatalogItem[] = [
 ];
 
 export function StrategiesView() {
-  const { selectedOptionsStrategy, setSelectedInstrument, setSelectedOptionsStrategy } = useSignalStore();
+  const { selectedOptionsStrategy, setSelectedInstrument, setSelectedOptionsStrategy, setOptionsStrategyParams } = useSignalStore();
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [forms, setForms] = useState<Record<string, StrategyForm>>({});
   const [results, setResults] = useState<Record<string, StrategyResult>>({});
@@ -304,6 +304,20 @@ export function StrategiesView() {
       }
       const data = (await res.json()) as StrategyResult;
       setResults((prev) => ({ ...prev, [strategy.id]: data }));
+      setOptionsStrategyParams({
+        ticker: form.ticker.toUpperCase(),
+        strikePrice: Number(form.strikePrice),
+        currentPrice: Number(form.currentPrice || form.strikePrice),
+        premiumPerContract: Number(form.premium),
+        numberOfContracts: Number(form.quantity || 1),
+        expirationDate: form.expirationDate,
+        availableCapital: Number(form.availableCapital),
+        assumptions: {
+          impliedVolatility: Number(form.impliedVolatility || 25),
+          timeDecayModel: form.timeDecayModel,
+          interestRate: Number(form.interestRate || 4),
+        },
+      });
     } catch (err) {
       setErrors((prev) => ({ ...prev, [strategy.id]: err instanceof Error ? err.message : "Error al calcular." }));
     } finally {

@@ -7,7 +7,7 @@ import type { ChatMessage } from "./types";
 import { ChatMessageList } from "./ChatMessageList";
 import { ChatInputBar } from "./ChatInputBar";
 import { ChatContextBadge } from "./ChatContextBadge";
-import { sendChatMessage, sendFundamentalCopilotMessage } from "../../services/chat/chatApi";
+import { sendChatMessage, sendFundamentalCopilotMessage, sendOptionsAnalysisQA } from "../../services/chat/chatApi";
 import { useSignalStore } from "../../store/signals";
 import { useAppShellStore } from "../../store/appShell";
 
@@ -46,7 +46,7 @@ function extractTickerFromText(text: string): string | null {
 export function ChatPanel() {
   const [messages, setMessages] = useState<ChatMessage[]>(() => loadHistory());
   const [pending, setPending] = useState(false);
-  const { selectedInstrument, selectedOptionsStrategy } = useSignalStore();
+  const { selectedInstrument, selectedOptionsStrategy, optionsStrategyParams } = useSignalStore();
   const { analysisCategory, setChatPanelCollapsed } = useAppShellStore();
 
   // FIC: Persist history to sessionStorage on every change.
@@ -107,7 +107,21 @@ export function ChatPanel() {
     try {
       let responseContent: string;
 
-      if (analysisCategory === "fundamental") {
+      const strategyKeyMap: Record<string, string> = {
+        "short-put":  "SHORT_PUT",
+        "long-put":   "LONG_PUT",
+        "short-call": "SHORT_CALL",
+        "long-call":  "LONG_CALL",
+      };
+
+      if (selectedOptionsStrategy && optionsStrategyParams) {
+        const response = await sendOptionsAnalysisQA({
+          ...optionsStrategyParams,
+          question: text,
+          selectedStrategy: strategyKeyMap[selectedOptionsStrategy.id],
+        });
+        responseContent = response.answer;
+      } else if (analysisCategory === "fundamental") {
         const ticker = selectedInstrument?.symbol ?? extractTickerFromText(text);
         if (!ticker) {
           throw new Error("Selecciona una empresa o escribe el ticker en tu pregunta para analizar fundamentales.");

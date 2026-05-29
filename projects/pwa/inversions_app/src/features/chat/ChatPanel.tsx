@@ -2,12 +2,12 @@
 // FIC: ChatPanel — panel de chat IA con historial en sessionStorage, envío con contexto y manejo de rate limit.
 
 import React, { useState, useEffect, useCallback } from "react";
-import { MessageSquare } from "lucide-react";
+import { MessageSquare, PanelRightClose } from "lucide-react";
 import type { ChatMessage } from "./types";
 import { ChatMessageList } from "./ChatMessageList";
 import { ChatInputBar } from "./ChatInputBar";
 import { ChatContextBadge } from "./ChatContextBadge";
-import { sendChatMessage } from "../../services/chat/chatApi";
+import { sendChatMessage, sendFundamentalCopilotMessage } from "../../services/chat/chatApi";
 import { useSignalStore } from "../../store/signals";
 import { useAppShellStore } from "../../store/appShell";
 
@@ -42,7 +42,7 @@ export function ChatPanel() {
   const [messages, setMessages] = useState<ChatMessage[]>(() => loadHistory());
   const [pending, setPending] = useState(false);
   const { selectedInstrument } = useSignalStore();
-  const { analysisCategory } = useAppShellStore();
+  const { analysisCategory, setChatPanelCollapsed } = useAppShellStore();
 
   // FIC: Persist history to sessionStorage on every change.
   // FIC: Persistir historial en sessionStorage en cada cambio.
@@ -62,6 +62,8 @@ export function ChatPanel() {
     };
     return [systemMsg, ...msgs.slice(msgs.length - TRIM_TO)];
   }, []);
+
+  const conversationHistoryRef = React.useRef<Array<{ role: "user" | "assistant"; content: string }>>([]);
 
   const handleSend = useCallback(async (text: string) => {
     if (pending) return;
@@ -93,17 +95,36 @@ export function ChatPanel() {
     setPending(true);
 
     try {
-      const response = await sendChatMessage({
-        symbol: context?.symbol ?? "",
-        timeframe: context?.timeframe ?? "1d",
-        question: text,
-        context: context?.analysisCategory,
-      });
+      let responseContent: string;
+
+      if (analysisCategory === "fundamental") {
+        const ticker = selectedInstrument?.symbol ?? "SPY";
+        const history = conversationHistoryRef.current;
+        const response = await sendFundamentalCopilotMessage({
+          ticker,
+          question: text,
+          conversationHistory: history,
+        });
+        responseContent = response.answer;
+        conversationHistoryRef.current = [
+          ...history,
+          { role: "user", content: text },
+          { role: "assistant", content: response.answer },
+        ];
+      } else {
+        const response = await sendChatMessage({
+          symbol: context?.symbol ?? "",
+          timeframe: context?.timeframe ?? "1d",
+          question: text,
+          context: context?.analysisCategory,
+        });
+        responseContent = response.explanation;
+      }
 
       setMessages((prev) =>
         prev.map((m) =>
           m.id === assistantId
-            ? { ...m, content: response.explanation, status: "ok" }
+            ? { ...m, content: responseContent, status: "ok" }
             : m
         )
       );
@@ -123,8 +144,7 @@ export function ChatPanel() {
 
   const handleRetry = useCallback((messageId: string) => {
     const errorMsg = messages.find((m) => m.id === messageId);
-    const preceding = messages.findLast?.((m) => m.role === "user") ??
-      messages.slice().reverse().find((m) => m.role === "user");
+    const preceding = messages.slice().reverse().find((m) => m.role === "user");
     if (preceding) {
       void handleSend(preceding.content);
     } else if (errorMsg) {
@@ -156,11 +176,33 @@ export function ChatPanel() {
           gap: "var(--space-sm)",
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: "var(--space-xs)" }}>
-          <MessageSquare size={16} style={{ color: "var(--color-accent)", flexShrink: 0 }} />
-          <span style={{ fontWeight: "var(--font-weight-emphasis)", fontSize: "var(--font-size-sm)", color: "var(--color-text)", whiteSpace: "nowrap" }}>
-            Chat IA
-          </span>
+        <div style={{ display: "flex", alignItems: "center", gap: "var(--space-xs)", minWidth: 0 }}>
+          <button
+            type="button"
+            aria-label="Contraer chat IA"
+            title="Contraer chat IA"
+            onClick={() => setChatPanelCollapsed(true)}
+            style={{
+              width: 28,
+              height: 28,
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              background: "transparent",
+              border: "1px solid var(--color-border)",
+              color: "var(--color-text-muted)",
+              flexShrink: 0,
+              padding: 0
+            }}
+          >
+            <PanelRightClose size={15} />
+          </button>
+          <div style={{ display: "flex", alignItems: "center", gap: "var(--space-xs)", minWidth: 0 }}>
+            <MessageSquare size={16} style={{ color: "var(--color-accent)", flexShrink: 0 }} />
+            <span style={{ fontWeight: "var(--font-weight-emphasis)", fontSize: "var(--font-size-sm)", color: "var(--color-text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+              Chat IA
+            </span>
+          </div>
         </div>
         <ChatContextBadge />
       </div>

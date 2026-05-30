@@ -87,7 +87,11 @@ export function useFundamentalAnalysis(): UseFundamentalAnalysisReturn {
                 riskTolerance: "MEDIUM",
               },
               controller.signal
-            )
+            ).catch((err: Error) => {
+              if (err.name === "AbortError" || controller.signal.aborted) throw err;
+              console.warn("[FundamentalAnalysis] Options calculation skipped:", err);
+              return null;
+            })
           : Promise.resolve(null);
 
       Promise.all([fundamentalPromise, optionsPromise])

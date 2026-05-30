@@ -14,6 +14,8 @@ import { SimulatorStrategySection } from "./simulation/SimulatorStrategySection"
 import { FundamentalAnalysisPanel } from "./FundamentalAnalysisPanel";
 import type { CoverageModalParams } from "./simulation/CoverageParamsModal";
 import type { OptionStrategyAnalysis } from "./simulation/OptionStrategyParamsModal";
+import type { WheelModalParams } from "./simulation/WheelParamsModal";
+import { TechnicalAnalysisExtendedSection } from "./TechnicalAnalysisExtendedSection";
 import { AppShell } from "../../layouts/AppShell";
 import { ActivityBar } from "../../components/ui/ActivityBar";
 import { LeftPanel } from "../sidebar/LeftPanel";
@@ -38,6 +40,7 @@ export function MainDashboard() {
   const [optionStrategyAnalysis, setOptionStrategyAnalysis] = useState<OptionStrategyAnalysis | null>(null);
   const [fundamentalAnalysis, setFundamentalAnalysis] = useState<FundamentalAnalysisResponse | null>(null);
   const [fundamentalAutoRunKey, setFundamentalAutoRunKey] = useState(0);
+  const [wheelSummary, setWheelSummary] = useState<WheelModalParams | null>(null);
   const [institutionalCoreWasActive, setInstitutionalCoreWasActive] = useState(false);
   const [copilotOpen, setCopilotOpen] = useState(false);
   const [selectedStrikeData, setSelectedStrikeData] = useState<{
@@ -63,6 +66,7 @@ export function MainDashboard() {
       setInstitutionalCoreWasActive(false);
       setOptionStrategyAnalysis(null);
       setFundamentalAnalysis(null);
+      setWheelSummary(null);
       setSelectedStrikeData(null);
       setSelectedStrike(undefined);
     }
@@ -81,6 +85,10 @@ export function MainDashboard() {
   const handleOptionStrategyCalculated = useCallback((analysis: OptionStrategyAnalysis) => {
     setOptionStrategyAnalysis(analysis);
     setActiveSimulationStrategy(analysis.strategy);
+  }, []);
+
+  const handleWheelConfirmed = useCallback((params: WheelModalParams) => {
+    setWheelSummary(params);
   }, []);
 
   // FIC: Writes selected strike to global store so CoverageStrategyModal can read it from anywhere. (EN)
@@ -274,6 +282,7 @@ export function MainDashboard() {
         onStrategyChange={setActiveSimulationStrategy}
         onCoverageParamsConfirmed={handleCoverageConfirmed}
         onOptionStrategyCalculated={handleOptionStrategyCalculated}
+        onWheelParamsConfirmed={handleWheelConfirmed}
       />
 
       {/* ── Simulation verdict */}
@@ -458,14 +467,12 @@ export function MainDashboard() {
           activeStrategy={activeSimulationStrategy}
           coverageRequest={coverageRequest}
           optionStrategyAnalysis={optionStrategyAnalysis}
+          wheelSummary={wheelSummary}
         />
       )}
 
       {/* ── Placeholder sections — reserved for other teams */}
-      <PlaceholderSection
-        title="Análisis Técnico Extendido"
-        description="Señales de indicadores técnicos avanzados, patrones de velas y análisis de estructura de mercado."
-      />
+      <TechnicalAnalysisExtendedSection symbol={selectedSymbol} timeframe={timeframe} />
       <FundamentalAnalysisPanel
         optionStrategyAnalysis={optionStrategyAnalysis}
         autoRunKey={fundamentalAutoRunKey}

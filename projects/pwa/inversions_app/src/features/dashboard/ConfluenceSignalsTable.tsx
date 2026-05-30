@@ -195,6 +195,7 @@ export function ConfluenceSignalsTable({ symbol, rows: rowsProp, activeStrategy,
   const [meta, setMeta] = useState<Omit<ConfluenceTableResponse, "rows"> | null>(null);
   const [modalTicker, setModalTicker] = useState<string | null>(null);
   const [modalResumen, setModalResumen] = useState<string>("");
+  const [modalRow, setModalRow] = useState<ConfluenceSignalRow | null>(null);
   const [observationRow, setObservationRow] = useState<(ConfluenceSignalRow & { resumen_analisis?: string }) | null>(null);
   const [detailTab, setDetailTab] = useState<"analysis" | "context">("analysis");
 
@@ -299,6 +300,7 @@ export function ConfluenceSignalsTable({ symbol, rows: rowsProp, activeStrategy,
                     if (instData) {
                       setModalTicker(row.ticket ?? null);
                       setModalResumen(row.resumen_analisis ?? "");
+                      setModalRow(row);
                       return;
                     }
                     setSelectedSignal({
@@ -319,7 +321,10 @@ export function ConfluenceSignalsTable({ symbol, rows: rowsProp, activeStrategy,
                   if (row.core === "A_FUNDAMENTAL") {
                     setDetailTab("analysis");
                     setObservationRow(row);
+                    return;
                   }
+                  setDetailTab("analysis");
+                  setObservationRow(row);
                 };
 
                 const cells = (
@@ -371,6 +376,11 @@ export function ConfluenceSignalsTable({ symbol, rows: rowsProp, activeStrategy,
         const contextMarkdown = buildChatContext(observationRow, resumen, activeStrategy);
         const reasoning = buildLocalChatExplanation(observationRow, resumen);
         const metrics = Object.entries(observationRow.observacion?.metricas ?? {});
+        const technicalEvidence = (observationRow.evidencia_refs ?? []).reduce<Record<string, string>>((acc, ref) => {
+          const separator = ref.indexOf(":");
+          if (separator > 0) acc[ref.slice(0, separator)] = ref.slice(separator + 1);
+          return acc;
+        }, {});
         const fieldCard = (label: string, value: React.ReactNode) => (
           <div style={{ border: "1px solid var(--color-border)", borderRadius: "var(--radius-sm)", padding: "0.7rem", background: "var(--color-surface)" }}>
             <div style={{ fontSize: "0.65rem", color: "var(--color-text-muted)", textTransform: "uppercase", fontWeight: 700, marginBottom: 4 }}>{label}</div>
@@ -462,6 +472,20 @@ export function ConfluenceSignalsTable({ symbol, rows: rowsProp, activeStrategy,
                     {fieldCard("Estrategia", activeStrategy?.replace(/_/g, " ") ?? "N/A")}
                   </div>
 
+                  {observationRow.core === "A_TECNICO" && (
+                    <>
+                      <h3 style={{ margin: "0 0 0.6rem", fontSize: "0.98rem", textTransform: "uppercase", color: "var(--color-text-muted)" }}>Detalle técnico</h3>
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: "0.5rem", marginBottom: "1rem" }}>
+                        {fieldCard("Trend", technicalEvidence.trend ?? observationRow.tendencia)}
+                        {fieldCard("ADX", technicalEvidence.adx ?? "-")}
+                        {fieldCard("Trend strength", technicalEvidence.trendStrength ?? observationRow.observacion?.metricas?.TREND_STRENGTH ?? "-")}
+                        {fieldCard("Soportes", technicalEvidence.supports ?? observationRow.observacion?.metricas?.SOPORTES ?? "0")}
+                        {fieldCard("Resistencias", technicalEvidence.resistances ?? observationRow.observacion?.metricas?.RESISTENCIAS ?? "0")}
+                        {fieldCard("Candles", observationRow.observacion?.metricas?.CANDLES_ANALYZED ?? "-")}
+                      </div>
+                    </>
+                  )}
+
                   <h3 style={{ margin: "0 0 0.6rem", fontSize: "0.98rem", textTransform: "uppercase", color: "var(--color-text-muted)" }}>Observación</h3>
                   <div style={{ fontSize: "0.82rem", lineHeight: 1.35, marginBottom: "1rem" }}>
                     <strong>Objetivo:</strong> {observationRow.observacion?.objetivo ?? "-"}<br />
@@ -503,10 +527,11 @@ export function ConfluenceSignalsTable({ symbol, rows: rowsProp, activeStrategy,
 
       <InstitutionalDetailModal
         isOpen={modalTicker !== null}
-        onClose={() => setModalTicker(null)}
+        onClose={() => { setModalTicker(null); setModalRow(null); }}
         ticker={modalTicker ?? ""}
         data={modalTicker ? (institutionalResults[modalTicker.toUpperCase()] ?? null) : null}
         resumen={modalResumen}
+        signalRow={modalRow ?? undefined}
       />
     </section>
   );

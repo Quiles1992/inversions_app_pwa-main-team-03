@@ -22,6 +22,7 @@ import {
   type CoreOptionStrategy,
   type OptionStrategyAnalysis,
 } from "./OptionStrategyParamsModal";
+import { WheelParamsModal, type WheelModalParams } from "./WheelParamsModal";
 
 // ─── Panel CSS ─────────────────────────────────────────────────────────────────
 // Uses only real Revolut design-system tokens from tokens.css.
@@ -452,6 +453,7 @@ const CORE_OPTION_STRATEGIES = new Set<string>(["LONG_CALL", "LONG_PUT", "SHORT_
 function isTermStrategy(e: string)     { return TERM_STRATEGIES.has(e); }
 function isCoverageStrategy(e: string) { return e === "COVERED_CALL"; }
 function isCoreOptionStrategy(e: string): e is CoreOptionStrategy { return CORE_OPTION_STRATEGIES.has(e); }
+function isWheelStrategy(e: string)    { return e === "WHEEL"; }
 
 const DEFAULT_TERM_PARAMS: TermStrategyParams = {
   optionStyle: "CALL",
@@ -469,6 +471,24 @@ const DEFAULT_COVERAGE_PARAMS: CoverageModalParams = {
   currentPrice: 0,
   shares: 100,
   riskTolerancePct: 0.05,
+};
+
+const DEFAULT_WHEEL_PARAMS: WheelModalParams = {
+  csp: {
+    ticker: "",
+    currentPrice: 0,
+    capitalDisponible: 0,
+    strikePut: 0,
+    primaPut: 0,
+    contratos: 1,
+  },
+  cc: {
+    acciones: 100,
+    costoPromedio: 0,
+    strikeCall: 0,
+    primaCall: 0,
+    contratos: 1,
+  },
 };
 
 type Preset = "2A" | "1A" | "6M" | "3M" | "1M";
@@ -506,6 +526,7 @@ interface Props {
   onStrategyChange?: (estrategia: string) => void;
   onCoverageParamsConfirmed?: (params: CoverageModalParams, kind: string) => void;
   onOptionStrategyCalculated?: (analysis: OptionStrategyAnalysis) => void;
+  onWheelParamsConfirmed?: (params: WheelModalParams) => void;
 }
 
 // ─── Main component ────────────────────────────────────────────────────────────
@@ -516,6 +537,7 @@ export function SimulationControlPanel({
   onStrategyChange,
   onCoverageParamsConfirmed,
   onOptionStrategyCalculated,
+  onWheelParamsConfirmed,
 }: Props) {
   const [preset, setPreset]               = useState<Preset>("3M");
   const [estrategiaFrom, setEstrategiaFrom] = useState(isoToday());
@@ -537,6 +559,15 @@ export function SimulationControlPanel({
   const [coverageParams, setCoverageParams]       = useState<CoverageModalParams>(DEFAULT_COVERAGE_PARAMS);
   const [optionParamsModalOpen, setOptionParamsModalOpen] = useState(false);
   const [optionParamsStrategy, setOptionParamsStrategy] = useState<CoreOptionStrategy>("LONG_CALL");
+  const [wheelModalOpen, setWheelModalOpen] = useState(false);
+  const [wheelParams, setWheelParams] = useState<WheelModalParams>({
+    ...DEFAULT_WHEEL_PARAMS,
+    csp: { ...DEFAULT_WHEEL_PARAMS.csp, ticker: ticket },
+  });
+
+  useEffect(() => {
+    setWheelParams((prev) => ({ ...prev, csp: { ...prev.csp, ticker: ticket } }));
+  }, [ticket]);
 
   useEffect(() => {
     if (!coverageModalOpen || coverageParams.currentPrice > 0) return;
@@ -548,6 +579,16 @@ export function SimulationControlPanel({
       .catch(() => { /* user can enter manually */ });
   }, [coverageModalOpen, ticket, coverageParams.currentPrice]);
 
+  useEffect(() => {
+    if (!wheelModalOpen || wheelParams.csp.currentPrice > 0) return;
+    getMarketQuotes([ticket])
+      .then((data) => {
+        const q = data.quotes.find((qt) => qt.symbol === ticket.toUpperCase());
+        if (q && q.price > 0) setWheelParams((prev) => ({ ...prev, csp: { ...prev.csp, currentPrice: q.price } }));
+      })
+      .catch(() => { /* user can enter manually */ });
+  }, [wheelModalOpen, ticket, wheelParams.csp.currentPrice]);
+
   const handleEstrategiaChange = (e: string) => {
     setEstrategia(e);
     onStrategyChange?.(e);
@@ -557,8 +598,11 @@ export function SimulationControlPanel({
       setOptionParamsModalOpen(true);
     } else if (isTermStrategy(e)) {
       setTermModalOpen(true);
+    } else if (isCoverageStrategy(e)) {
+      setCoverageModalOpen(true);
+    } else if (isWheelStrategy(e)) {
+      setWheelModalOpen(true);
     }
-    else if (isCoverageStrategy(e)) setCoverageModalOpen(true);
   };
 
   const toggleCore = (c: CoreId)          => setCoresOn((p) => ({ ...p, [c]: !p[c] }));
@@ -808,6 +852,14 @@ export function SimulationControlPanel({
         ticker={ticket}
         onClose={() => setOptionParamsModalOpen(false)}
         onCalculated={onOptionStrategyCalculated}
+      />
+      <WheelParamsModal
+        open={wheelModalOpen}
+        ticker={ticket}
+        params={wheelParams}
+        onChange={setWheelParams}
+        onClose={() => setWheelModalOpen(false)}
+        onConfirm={(params) => onWheelParamsConfirmed?.(params)}
       />
     </>
   );

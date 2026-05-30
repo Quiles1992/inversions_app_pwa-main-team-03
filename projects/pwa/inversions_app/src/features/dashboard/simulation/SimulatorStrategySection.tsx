@@ -10,6 +10,7 @@ import {
 } from "../../../services/coverage/coverageApi";
 import type { CoverageModalParams } from "./CoverageParamsModal";
 import type { OptionStrategyAnalysis } from "./OptionStrategyParamsModal";
+import type { WheelModalParams } from "./WheelParamsModal";
 
 const TERM_STRATEGIES = new Set(["CALENDAR_SPREAD", "DIAGONAL_SPREAD"]);
 const CORE_OPTION_STRATEGIES = new Set(["LONG_CALL", "LONG_PUT", "SHORT_CALL", "SHORT_PUT"]);
@@ -32,13 +33,14 @@ interface Props {
   activeStrategy: string;
   coverageRequest?: { params: CoverageModalParams; kind: string } | null;
   optionStrategyAnalysis?: OptionStrategyAnalysis | null;
+  wheelSummary?: WheelModalParams | null;
 }
 
 function money(value: number | "Ilimitado"): string {
   return value === "Ilimitado" ? "Ilimitado" : `$${value.toFixed(2)}`;
 }
 
-export function SimulatorStrategySection({ ticker, activeStrategy, coverageRequest, optionStrategyAnalysis }: Props) {
+export function SimulatorStrategySection({ ticker, activeStrategy, coverageRequest, optionStrategyAnalysis, wheelSummary }: Props) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [results, setResults] = useState<CoverageAnalyzeResponse | null>(null);
@@ -89,10 +91,11 @@ export function SimulatorStrategySection({ ticker, activeStrategy, coverageReque
   const isCoverageStrategy = activeStrategy === "COVERED_CALL";
   const isCoreOptionStrategy = CORE_OPTION_STRATEGIES.has(activeStrategy);
   const hasCoreOptionAnalysis = isCoreOptionStrategy && optionStrategyAnalysis?.strategy === activeStrategy;
+  const isWheelStrategy = activeStrategy === "WHEEL";
 
   const cardStyle: React.CSSProperties = {
     padding: "var(--space-lg)",
-    opacity: (!isCoverageStrategy && !isTermStrategy && !isCoreOptionStrategy) ? 0.5 : 1,
+    opacity: (!isCoverageStrategy && !isTermStrategy && !isCoreOptionStrategy && !isWheelStrategy) ? 0.5 : 1,
   };
 
   const mutedText: React.CSSProperties = {
@@ -107,7 +110,7 @@ export function SimulatorStrategySection({ ticker, activeStrategy, coverageReque
         <h2 style={{ margin: 0, fontSize: "var(--font-size-base)" }}>
           Estrategia · {sectionTitle}
         </h2>
-        {(isTermStrategy || (!isCoverageStrategy && !isCoreOptionStrategy)) && (
+        {(isTermStrategy || (!isCoverageStrategy && !isCoreOptionStrategy && !isWheelStrategy)) && (
           <span style={{
             fontSize: "var(--font-size-xs)",
             color: "var(--color-text-muted)",
@@ -128,7 +131,7 @@ export function SimulatorStrategySection({ ticker, activeStrategy, coverageReque
       )}
 
       {/* Unknown strategies */}
-      {!isCoverageStrategy && !isTermStrategy && !isCoreOptionStrategy && (
+      {!isCoverageStrategy && !isTermStrategy && !isCoreOptionStrategy && !isWheelStrategy && (
         <p style={mutedText}>
           El análisis de {sectionTitle} está en construcción y estará disponible próximamente.
         </p>
@@ -319,6 +322,56 @@ export function SimulatorStrategySection({ ticker, activeStrategy, coverageReque
               )}
             </>
           )}
+        </>
+      )}
+
+      {isWheelStrategy && (
+        <>
+          {!wheelSummary && (
+            <p style={mutedText}>
+              Selecciona un PUT desde la cadena de opciones y configura los parámetros Wheel en el panel de control.
+            </p>
+          )}
+          {wheelSummary && (() => {
+            const { csp, cc } = wheelSummary;
+            const capitalComprometido = csp.strikePut * csp.contratos * 100;
+            const primaCsp = csp.primaPut * csp.contratos * 100;
+            const primaCc = cc.primaCall * cc.contratos * 100;
+            const breakeven = csp.strikePut - csp.primaPut - cc.primaCall;
+            const roi = capitalComprometido > 0 ? (primaCsp + primaCc) / capitalComprometido : 0;
+            const hasCc = cc.strikeCall > 0 && cc.primaCall > 0;
+            const rows: Array<{ label: string; value: string; color?: string }> = [
+              { label: "Estado", value: hasCc ? "CC_CONFIGURADO" : "CSP_CONFIGURADO", color: hasCc ? "var(--color-buy)" : "var(--color-accent)" },
+              { label: "Capital comprometido", value: capitalComprometido > 0 ? `$${capitalComprometido.toFixed(2)}` : "-" },
+              { label: "Prima CSP recibida", value: primaCsp > 0 ? `$${primaCsp.toFixed(2)}` : "-", color: "var(--color-buy)" },
+              { label: "Prima CC recibida", value: primaCc > 0 ? `$${primaCc.toFixed(2)}` : "-", color: "var(--color-buy)" },
+              { label: "Breakeven Wheel", value: breakeven > 0 ? `$${breakeven.toFixed(2)}` : "-" },
+              { label: "ROI estimado", value: roi > 0 ? `${(roi * 100).toFixed(2)}%` : "-", color: "var(--color-buy)" },
+            ];
+
+            return (
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: "var(--space-md)" }}>
+                {rows.map((r) => (
+                  <div
+                    key={r.label}
+                    style={{
+                      background: "var(--color-surface)",
+                      borderRadius: "var(--radius-sm)",
+                      padding: "var(--space-sm) var(--space-md)",
+                      border: "1px solid var(--color-border-subtle)",
+                    }}
+                  >
+                    <div style={{ fontSize: "var(--font-size-xs)", color: "var(--color-text-muted)", marginBottom: 2 }}>
+                      {r.label}
+                    </div>
+                    <div style={{ fontSize: "var(--font-size-sm)", fontWeight: 700, color: r.color ?? "var(--color-text)" }}>
+                      {r.value}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
         </>
       )}
     </section>

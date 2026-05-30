@@ -4,16 +4,17 @@ import { ContentModal } from "../../../components/ui/ContentModal";
 import { getMarketQuotes } from "../../../services/signals/marketApi";
 import { useSignalStore } from "../../../store/signals";
 
-export type CoreOptionStrategy = "BUY_CALL" | "BUY_PUT" | "SELL_CALL" | "SELL_PUT";
+export type CoreOptionStrategy = "LONG_CALL" | "LONG_PUT" | "SHORT_CALL" | "SHORT_PUT";
 
 interface Props {
   open: boolean;
   strategy: CoreOptionStrategy;
   ticker: string;
   onClose: () => void;
+  onCalculated?: (analysis: OptionStrategyAnalysis) => void;
 }
 
-interface FormState {
+export interface OptionStrategyFormState {
   ticker: string;
   currentPrice: string;
   strikePrice: string;
@@ -26,7 +27,7 @@ interface FormState {
   riskFreeRate: string;
 }
 
-interface StrategyResult {
+export interface StrategyResult {
   maxProfit: number | "Ilimitado";
   maxLoss: number | "Ilimitado";
   breakeven: number;
@@ -35,6 +36,15 @@ interface StrategyResult {
   scenarioAtm: number;
   scenarioPlus5: number;
   scenarioMinus5: number;
+}
+
+export interface OptionStrategyAnalysis {
+  strategy: CoreOptionStrategy;
+  ticker: string;
+  params: OptionStrategyFormState;
+  result: StrategyResult;
+  payoffPoints: Array<{ underlyingPrice: number; pnl: number }>;
+  calculatedAt: string;
 }
 
 const STRATEGY_COPY: Record<CoreOptionStrategy, {
@@ -46,7 +56,7 @@ const STRATEGY_COPY: Record<CoreOptionStrategy, {
   bias: "bullish" | "bearish";
   premiumLabel: string;
 }> = {
-  BUY_CALL: {
+  LONG_CALL: {
     title: "Long Call",
     optionType: "CALL",
     direction: "LONG",
@@ -55,7 +65,7 @@ const STRATEGY_COPY: Record<CoreOptionStrategy, {
     bias: "bullish",
     premiumLabel: "Prima pagada $",
   },
-  BUY_PUT: {
+  LONG_PUT: {
     title: "Long Put",
     optionType: "PUT",
     direction: "LONG",
@@ -64,7 +74,7 @@ const STRATEGY_COPY: Record<CoreOptionStrategy, {
     bias: "bearish",
     premiumLabel: "Prima pagada $",
   },
-  SELL_CALL: {
+  SHORT_CALL: {
     title: "Short Call",
     optionType: "CALL",
     direction: "SHORT",
@@ -73,7 +83,7 @@ const STRATEGY_COPY: Record<CoreOptionStrategy, {
     bias: "bearish",
     premiumLabel: "Prima recibida $",
   },
-  SELL_PUT: {
+  SHORT_PUT: {
     title: "Short Put",
     optionType: "PUT",
     direction: "SHORT",
@@ -85,10 +95,10 @@ const STRATEGY_COPY: Record<CoreOptionStrategy, {
 };
 
 const OPTION_STRATEGY_OPTIONS: Array<{ value: CoreOptionStrategy; label: string }> = [
-  { value: "BUY_CALL", label: "Long Call" },
-  { value: "BUY_PUT", label: "Long Put" },
-  { value: "SELL_CALL", label: "Short Call" },
-  { value: "SELL_PUT", label: "Short Put" },
+  { value: "LONG_CALL", label: "LONG CALL" },
+  { value: "LONG_PUT", label: "LONG PUT" },
+  { value: "SHORT_CALL", label: "SHORT CALL" },
+  { value: "SHORT_PUT", label: "SHORT PUT" },
 ];
 
 function isoPlusDays(days: number): string {
@@ -98,6 +108,16 @@ function isoPlusDays(days: number): string {
 function toNumber(value: string): number {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function ivToPercent(iv: number | undefined): string | undefined {
+  if (typeof iv !== "number" || !Number.isFinite(iv) || iv <= 0) return undefined;
+  const percent = iv <= 1 ? iv * 100 : iv;
+  return Number(percent.toFixed(2)).toString();
+}
+
+function toFiniteMoney(value: number | "Ilimitado"): number | null {
+  return value === "Ilimitado" ? null : value;
 }
 
 function formatMoney(value: number | "Ilimitado"): string {
@@ -116,13 +136,13 @@ function payoff(
   const putIntrinsic = Math.max(strike - priceAtExpiration, 0) * multiplier;
   const totalPremium = premium * multiplier;
 
-  if (strategy === "BUY_CALL") return callIntrinsic - totalPremium;
-  if (strategy === "BUY_PUT") return putIntrinsic - totalPremium;
-  if (strategy === "SELL_CALL") return totalPremium - callIntrinsic;
+  if (strategy === "LONG_CALL") return callIntrinsic - totalPremium;
+  if (strategy === "LONG_PUT") return putIntrinsic - totalPremium;
+  if (strategy === "SHORT_CALL") return totalPremium - callIntrinsic;
   return totalPremium - putIntrinsic;
 }
 
-function calculateResult(strategy: CoreOptionStrategy, form: FormState): StrategyResult {
+function calculateResult(strategy: CoreOptionStrategy, form: OptionStrategyFormState): StrategyResult {
   const current = toNumber(form.currentPrice);
   const strike = toNumber(form.strikePrice);
   const premium = toNumber(form.premium);
@@ -131,20 +151,20 @@ function calculateResult(strategy: CoreOptionStrategy, form: FormState): Strateg
   const totalPremium = premium * multiplier;
 
   const breakeven =
-    strategy === "BUY_CALL" || strategy === "SELL_CALL"
+    strategy === "LONG_CALL" || strategy === "SHORT_CALL"
       ? strike + premium
       : strike - premium;
 
   let maxProfit: StrategyResult["maxProfit"];
   let maxLoss: StrategyResult["maxLoss"];
 
-  if (strategy === "BUY_CALL") {
+  if (strategy === "LONG_CALL") {
     maxProfit = "Ilimitado";
     maxLoss = totalPremium;
-  } else if (strategy === "BUY_PUT") {
+  } else if (strategy === "LONG_PUT") {
     maxProfit = Math.max(strike * multiplier - totalPremium, 0);
     maxLoss = totalPremium;
-  } else if (strategy === "SELL_CALL") {
+  } else if (strategy === "SHORT_CALL") {
     maxProfit = totalPremium;
     maxLoss = "Ilimitado";
   } else {
@@ -153,9 +173,9 @@ function calculateResult(strategy: CoreOptionStrategy, form: FormState): Strateg
   }
 
   const outOfTheMoney =
-    strategy === "SELL_CALL"
+    strategy === "SHORT_CALL"
       ? Math.max(strike - current, 0)
-      : strategy === "SELL_PUT"
+      : strategy === "SHORT_PUT"
       ? Math.max(current - strike, 0)
       : 0;
   const shortOptionMargin = Math.max(
@@ -169,17 +189,87 @@ function calculateResult(strategy: CoreOptionStrategy, form: FormState): Strateg
     breakeven,
     netPremium: totalPremium,
     requiredMargin:
-      strategy === "BUY_CALL" || strategy === "BUY_PUT" ? totalPremium : shortOptionMargin,
+      strategy === "LONG_CALL" || strategy === "LONG_PUT" ? totalPremium : shortOptionMargin,
     scenarioAtm: payoff(strategy, current, strike, premium, contracts),
     scenarioPlus5: payoff(strategy, current * 1.05, strike, premium, contracts),
     scenarioMinus5: payoff(strategy, current * 0.95, strike, premium, contracts),
   };
 }
 
-export function OptionStrategyParamsModal({ open, strategy, ticker, onClose }: Props) {
+function buildPayoffPoints(strategy: CoreOptionStrategy, form: OptionStrategyFormState): Array<{ underlyingPrice: number; pnl: number }> {
+  const current = Math.max(toNumber(form.currentPrice), 1);
+  const strike = toNumber(form.strikePrice);
+  const premium = toNumber(form.premium);
+  const contracts = Math.max(1, toNumber(form.contracts));
+  const min = Math.max(0.01, current * 0.7);
+  const max = current * 1.3;
+  const steps = 24;
+
+  return Array.from({ length: steps + 1 }, (_, index) => {
+    const underlyingPrice = min + ((max - min) * index) / steps;
+    return {
+      underlyingPrice: Number(underlyingPrice.toFixed(2)),
+      pnl: payoff(strategy, underlyingPrice, strike, premium, contracts),
+    };
+  });
+}
+
+export function optionStrategyResultToApiShape(analysis: OptionStrategyAnalysis) {
+  const { strategy, params, result, ticker } = analysis;
+  const direction = strategy.startsWith("LONG") ? "LONG" : "SHORT";
+  const optionType = strategy.endsWith("CALL") ? "CALL" : "PUT";
+  const premium = toNumber(params.premium);
+  const quantity = Math.max(1, toNumber(params.contracts));
+
+  return {
+    ticker,
+    optionType,
+    direction,
+    premium,
+    quantity,
+    breakEvenPrice: result.breakeven,
+    maxProfit: toFiniteMoney(result.maxProfit),
+    maxLoss: toFiniteMoney(result.maxLoss),
+    requiredMargin: result.requiredMargin,
+    scenarioAtm: {
+      priceMovement: "ATM",
+      priceAtScenario: toNumber(params.currentPrice),
+      profitLoss: result.scenarioAtm,
+      roi: result.netPremium > 0 ? (result.scenarioAtm / result.netPremium) * 100 : 0,
+    },
+    scenarioPlus5: {
+      priceMovement: "+5%",
+      priceAtScenario: toNumber(params.currentPrice) * 1.05,
+      profitLoss: result.scenarioPlus5,
+      roi: result.netPremium > 0 ? (result.scenarioPlus5 / result.netPremium) * 100 : 0,
+    },
+    scenarioMinus5: {
+      priceMovement: "-5%",
+      priceAtScenario: toNumber(params.currentPrice) * 0.95,
+      profitLoss: result.scenarioMinus5,
+      roi: result.netPremium > 0 ? (result.scenarioMinus5 / result.netPremium) * 100 : 0,
+    },
+    riskAdjustedReturn: result.netPremium > 0 && typeof result.maxProfit === "number" ? result.maxProfit / result.netPremium : 0,
+    probabilityItm: 0,
+    warnings: [] as string[],
+    calculatedAt: analysis.calculatedAt,
+    calculationVersion: "frontend-1.0",
+    assumptions: {
+      impliedVolatility: toNumber(params.impliedVolatility),
+      timeDecayModel: params.thetaDecay,
+      interestRate: toNumber(params.riskFreeRate),
+    },
+  };
+}
+
+export function OptionStrategyParamsModal({ open, strategy, ticker, onClose, onCalculated }: Props) {
   const { selectedStrike } = useSignalStore();
   const meta = STRATEGY_COPY[strategy];
-  const [form, setForm] = useState<FormState>({
+  const selectedStrikeMatchesStrategy =
+    !!selectedStrike &&
+    ((meta.optionType === "CALL" && selectedStrike.type === "call") ||
+      (meta.optionType === "PUT" && selectedStrike.type === "put"));
+  const [form, setForm] = useState<OptionStrategyFormState>({
     ticker,
     currentPrice: "",
     strikePrice: "100",
@@ -200,23 +290,24 @@ export function OptionStrategyParamsModal({ open, strategy, ticker, onClose }: P
 
     setForm((prev) => {
       const nextTicker = ticker.toUpperCase();
-      const shouldUseSelectedStrike =
-        selectedStrike &&
-        ((meta.optionType === "CALL" && selectedStrike.type === "call") ||
-          (meta.optionType === "PUT" && selectedStrike.type === "put"));
 
       return {
         ...prev,
         ticker: nextTicker,
-        strikePrice: shouldUseSelectedStrike ? String(selectedStrike.strike) : prev.strikePrice,
-        premium: shouldUseSelectedStrike && selectedStrike.premium > 0 ? String(selectedStrike.premium) : prev.premium,
-        impliedVolatility: shouldUseSelectedStrike && selectedStrike.iv > 0
-          ? String(Number((selectedStrike.iv * 100).toFixed(2)))
-          : prev.impliedVolatility,
+        currentPrice: selectedStrikeMatchesStrategy && selectedStrike.underlyingPrice && selectedStrike.underlyingPrice > 0
+          ? selectedStrike.underlyingPrice.toFixed(2)
+          : prev.currentPrice,
+        strikePrice: selectedStrikeMatchesStrategy ? String(selectedStrike.strike) : prev.strikePrice,
+        premium: selectedStrikeMatchesStrategy && selectedStrike.premium > 0 ? String(selectedStrike.premium) : prev.premium,
+        expiration: selectedStrikeMatchesStrategy && selectedStrike.expiration ? selectedStrike.expiration : prev.expiration,
+        impliedVolatility: selectedStrikeMatchesStrategy ? (ivToPercent(selectedStrike.iv) ?? prev.impliedVolatility) : prev.impliedVolatility,
+        riskFreeRate: selectedStrikeMatchesStrategy && typeof selectedStrike.estimatedRiskFreeRate === "number"
+          ? Number(selectedStrike.estimatedRiskFreeRate.toFixed(2)).toString()
+          : prev.riskFreeRate,
       };
     });
     setResult(null);
-  }, [open, ticker, selectedStrike, meta.optionType]);
+  }, [open, ticker, selectedStrike, selectedStrikeMatchesStrategy]);
 
   useEffect(() => {
     if (!open || !form.ticker) return;
@@ -236,7 +327,7 @@ export function OptionStrategyParamsModal({ open, strategy, ticker, onClose }: P
         setForm((prev) => ({
           ...prev,
           currentPrice: quote.price.toFixed(2),
-          strikePrice: selectedStrike ? prev.strikePrice : quote.price.toFixed(0),
+          strikePrice: selectedStrikeMatchesStrategy ? prev.strikePrice : quote.price.toFixed(0),
         }));
       })
       .catch(() => {
@@ -247,15 +338,29 @@ export function OptionStrategyParamsModal({ open, strategy, ticker, onClose }: P
       });
 
     return () => { cancelled = true; };
-  }, [open, form.ticker, selectedStrike]);
+  }, [open, form.ticker, selectedStrikeMatchesStrategy]);
 
   const canCalculate = useMemo(() => {
     return toNumber(form.strikePrice) > 0 && toNumber(form.premium) >= 0 && toNumber(form.contracts) > 0;
   }, [form.strikePrice, form.premium, form.contracts]);
 
-  const update = (field: keyof FormState, value: string) => {
+  const update = (field: keyof OptionStrategyFormState, value: string) => {
     setForm((prev) => ({ ...prev, [field]: value }));
     setResult(null);
+  };
+
+  const calculateAndPublish = () => {
+    const nextResult = calculateResult(strategy, form);
+    setResult(nextResult);
+    onCalculated?.({
+      strategy,
+      ticker: form.ticker.toUpperCase(),
+      params: form,
+      result: nextResult,
+      payoffPoints: buildPayoffPoints(strategy, form),
+      calculatedAt: new Date().toISOString(),
+    });
+    onClose();
   };
 
   const inputStyle: React.CSSProperties = {
@@ -316,6 +421,11 @@ export function OptionStrategyParamsModal({ open, strategy, ticker, onClose }: P
           <span style={{ color: meta.bias === "bullish" ? "var(--color-buy)" : "var(--color-sell)", fontSize: "var(--font-size-xs)", fontWeight: 700 }}>
             {meta.bias}
           </span>
+          {selectedStrikeMatchesStrategy && (
+            <span style={{ color: "var(--color-buy)", background: "rgba(0,168,126,0.12)", borderRadius: "var(--radius-pill)", padding: "2px 10px", fontSize: "var(--font-size-xs)", fontWeight: 700 }}>
+              Datos de option chain
+            </span>
+          )}
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "var(--space-sm)" }}>
@@ -373,7 +483,7 @@ export function OptionStrategyParamsModal({ open, strategy, ticker, onClose }: P
         <button
           type="button"
           disabled={!canCalculate}
-          onClick={() => setResult(calculateResult(strategy, form))}
+          onClick={calculateAndPublish}
           style={{
             width: "100%",
             display: "flex",
@@ -391,19 +501,8 @@ export function OptionStrategyParamsModal({ open, strategy, ticker, onClose }: P
           }}
         >
           <Play size={13} fill="currentColor" strokeWidth={0} />
-          Calcular
+          Guardar parametros
         </button>
-
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "var(--space-xs)" }}>
-          {metricCard("Max. profit", result ? formatMoney(result.maxProfit) : "-")}
-          {metricCard("Max. loss", result ? formatMoney(result.maxLoss) : "-")}
-          {metricCard("Breakeven", result ? `$${result.breakeven.toFixed(2)}` : "-")}
-          {metricCard(meta.direction === "LONG" ? "Prima neta" : "Credito neto", result ? `$${result.netPremium.toFixed(2)}` : "-")}
-          {metricCard("Margen req.", result ? `$${result.requiredMargin.toFixed(2)}` : "-")}
-          {metricCard("Escenario +5%", result ? `$${result.scenarioPlus5.toFixed(2)}` : "-")}
-          {metricCard("Escenario ATM", result ? `$${result.scenarioAtm.toFixed(2)}` : "-")}
-          {metricCard("Escenario -5%", result ? `$${result.scenarioMinus5.toFixed(2)}` : "-")}
-        </div>
       </div>
     </ContentModal>
   );

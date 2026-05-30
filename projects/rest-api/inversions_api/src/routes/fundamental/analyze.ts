@@ -25,7 +25,8 @@ export function createFundamentalAnalyzeRouter(supabaseClient: SupabaseClient): 
         strategy = "Long Call",
         comparisons = [],
         projectionFrom,
-        projectionTo
+        projectionTo,
+        currentPrice
       } = req.body;
 
       if (!ticker || typeof ticker !== "string") {
@@ -47,7 +48,16 @@ export function createFundamentalAnalyzeRouter(supabaseClient: SupabaseClient): 
         });
       }
 
+      const currentPriceOverride = Number(currentPrice);
+      if (Number.isFinite(currentPriceOverride) && currentPriceOverride > 0) {
+        dataResult.data.metrics.priceHistory = {
+          ...(dataResult.data.metrics.priceHistory ?? {}),
+          currentPrice: currentPriceOverride
+        };
+      }
+
       const opts: AnalysisOptions = {
+        ticker: sym,
         investmentProfile: String(investmentProfile),
         horizon: String(horizon),
         selectedMetrics: Array.isArray(selectedMetrics) ? selectedMetrics.map(String) : [],

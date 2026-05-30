@@ -20,6 +20,7 @@ import {
   OptionStrategyParamsModal,
   OPTION_STRATEGY_OPTIONS,
   type CoreOptionStrategy,
+  type OptionStrategyAnalysis,
 } from "./OptionStrategyParamsModal";
 
 // ─── Panel CSS ─────────────────────────────────────────────────────────────────
@@ -447,7 +448,7 @@ function ChipButton({
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
 const TERM_STRATEGIES = new Set(["CALENDAR_SPREAD", "DIAGONAL_SPREAD"]);
-const CORE_OPTION_STRATEGIES = new Set<string>(["BUY_CALL", "BUY_PUT", "SELL_CALL", "SELL_PUT"]);
+const CORE_OPTION_STRATEGIES = new Set<string>(["LONG_CALL", "LONG_PUT", "SHORT_CALL", "SHORT_PUT"]);
 function isTermStrategy(e: string)     { return TERM_STRATEGIES.has(e); }
 function isCoverageStrategy(e: string) { return e === "COVERED_CALL"; }
 function isCoreOptionStrategy(e: string): e is CoreOptionStrategy { return CORE_OPTION_STRATEGIES.has(e); }
@@ -504,6 +505,7 @@ interface Props {
   onExecute?: (activeCoreIds: CoreId[]) => void;
   onStrategyChange?: (estrategia: string) => void;
   onCoverageParamsConfirmed?: (params: CoverageModalParams, kind: string) => void;
+  onOptionStrategyCalculated?: (analysis: OptionStrategyAnalysis) => void;
 }
 
 // ─── Main component ────────────────────────────────────────────────────────────
@@ -513,6 +515,7 @@ export function SimulationControlPanel({
   onExecute,
   onStrategyChange,
   onCoverageParamsConfirmed,
+  onOptionStrategyCalculated,
 }: Props) {
   const [preset, setPreset]               = useState<Preset>("3M");
   const [estrategiaFrom, setEstrategiaFrom] = useState(isoToday());
@@ -533,7 +536,7 @@ export function SimulationControlPanel({
   const [coverageModalOpen, setCoverageModalOpen] = useState(false);
   const [coverageParams, setCoverageParams]       = useState<CoverageModalParams>(DEFAULT_COVERAGE_PARAMS);
   const [optionParamsModalOpen, setOptionParamsModalOpen] = useState(false);
-  const [optionParamsStrategy, setOptionParamsStrategy] = useState<CoreOptionStrategy>("BUY_CALL");
+  const [optionParamsStrategy, setOptionParamsStrategy] = useState<CoreOptionStrategy>("LONG_CALL");
 
   useEffect(() => {
     if (!coverageModalOpen || coverageParams.currentPrice > 0) return;
@@ -804,6 +807,7 @@ export function SimulationControlPanel({
         strategy={optionParamsStrategy}
         ticker={ticket}
         onClose={() => setOptionParamsModalOpen(false)}
+        onCalculated={onOptionStrategyCalculated}
       />
     </>
   );

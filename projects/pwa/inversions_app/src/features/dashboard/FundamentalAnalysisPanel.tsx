@@ -1,11 +1,17 @@
 // FIC: Fundamental Analysis Panel — replaces placeholder in MainDashboard. (EN)
 // FIC: Panel de Análisis Fundamental — reemplaza el placeholder en MainDashboard. (ES)
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useSignalStore } from "../../store/signals";
 import { useFundamentalAnalysis } from "../../hooks/useFundamentalAnalysis";
 import { formatCurrency } from "../../utils/format";
 import type { FundamentalData, OptionStrategyResult, PriceScenario } from "../../services/fundamental/fundamentalApi";
+import {
+  optionStrategyResultToApiShape,
+  type OptionStrategyAnalysis,
+} from "./simulation/OptionStrategyParamsModal";
+import { ProjectionSimulationPanel } from "./simulation/ProjectionSimulationPanel";
+import { getMarketQuotes } from "../../services/signals/marketApi";
 
 // ─── Metric helpers ───────────────────────────────────────────────────────────
 
@@ -176,22 +182,85 @@ const PROFILES = [
   { id: "Income", label: "Income" },
 ] as const;
 
+const FUNDAMENTAL_METRICS = ["Valoración", "Crecimiento", "Rentabilidad", "Salud Financiera", "Flujo de Caja", "Riesgo", "Ventaja Competitiva"];
+
+function isoToday(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function isoPlusDays(days: number): string {
+  return new Date(Date.now() + days * 86_400_000).toISOString().slice(0, 10);
+}
+
 // ─── Main component ──────────────────────────────────────────────────────────
 
-export function FundamentalAnalysisPanel() {
+interface Props {
+  optionStrategyAnalysis?: OptionStrategyAnalysis | null;
+  autoRunKey?: number;
+  onAnalysisComplete?: (data: ReturnType<typeof useFundamentalAnalysis>["data"]) => void;
+}
+
+export function FundamentalAnalysisPanel({ optionStrategyAnalysis, autoRunKey = 0, onAnalysisComplete }: Props) {
   const { selectedInstrument, selectedStrike } = useSignalStore();
   const selectedSymbol = selectedInstrument?.symbol ?? "SPY";
   const { data, optionsResult, loading, error, analyze } = useFundamentalAnalysis();
   const [profile, setProfile] = useState("Value");
+  const displayedOptionsResult = optionStrategyAnalysis
+    ? optionStrategyResultToApiShape(optionStrategyAnalysis) as unknown as OptionStrategyResult
+    : optionsResult;
+
+  useEffect(() => {
+    if (data) onAnalysisComplete?.(data);
+  }, [data, onAnalysisComplete]);
+
+  const resolveCurrentPrice = async (): Promise<number | undefined> => {
+    const strategyPrice = Number(optionStrategyAnalysis?.params.currentPrice);
+    if (Number.isFinite(strategyPrice) && strategyPrice > 0) return strategyPrice;
+
+    try {
+      const quotes = await getMarketQuotes([selectedSymbol]);
+      const quote = quotes.quotes.find((item) => item.symbol.toUpperCase() === selectedSymbol.toUpperCase());
+      if (quote && quote.price > 0) return quote.price;
+    } catch {
+      // El backend conserva su fallback si no hay quote disponible.
+    }
+
+    return undefined;
+  };
+
+  const runFundamentalAnalysis = async () => {
+    const projectionFrom = isoToday();
+    const projectionTo = isoPlusDays(30);
+    const currentPrice = await resolveCurrentPrice();
+    analyze({
+      ticker: selectedSymbol,
+      source: "finviz",
+      investmentProfile: profile,
+      horizon: "Mediano plazo",
+      selectedMetrics: FUNDAMENTAL_METRICS,
+      strategy: optionStrategyAnalysis?.strategy ?? "Long Call",
+      comparisons: ["Comparar con S&P500"],
+      projectionFrom,
+      projectionTo,
+      currentPrice,
+    });
+  };
+
+  useEffect(() => {
+    if (autoRunKey <= 0) return;
+    void runFundamentalAnalysis();
+  }, [autoRunKey]);
 
   // ─── Build warnings ────────────────────────────────────────────────────────
 
   function buildWarnings(): Array<{ severity: "high" | "medium"; message: string }> {
     const warnings: Array<{ severity: "high" | "medium"; message: string }> = [];
 
-    if (selectedStrike && optionsResult) {
+    if ((selectedStrike || optionStrategyAnalysis) && displayedOptionsResult) {
       // Premium > 10% del strike
-      const premiumPct = (selectedStrike.premium / selectedStrike.strike) * 100;
+      const strike = selectedStrike?.strike ?? Number(optionStrategyAnalysis?.params.strikePrice ?? 0);
+      const premium = selectedStrike?.premium ?? Number(optionStrategyAnalysis?.params.premium ?? 0);
+      const premiumPct = strike > 0 ? (premium / strike) * 100 : 0;
       if (premiumPct > 10) {
         warnings.push({
           severity: "high",
@@ -200,8 +269,8 @@ export function FundamentalAnalysisPanel() {
       }
 
       // Inherited warnings from backend
-      if (optionsResult.warnings) {
-        for (const w of optionsResult.warnings) {
+      if (displayedOptionsResult.warnings) {
+        for (const w of displayedOptionsResult.warnings) {
           if (w.includes("7 días") || w.includes("decay")) {
             warnings.push({ severity: "medium", message: w });
           } else if (w.includes("Capital") || w.includes("insuficiente")) {
@@ -239,7 +308,7 @@ export function FundamentalAnalysisPanel() {
     return (
       <section id="fundamental-analysis-panel" className="card" style={{ padding: "var(--space-lg)" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "var(--space-md)" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "var(--space-sm)" }}>
+          <div style={{ display: "none", alignItems: "center", gap: "var(--space-sm)" }}>
             <h2 style={{ margin: 0, fontSize: "var(--font-size-base)" }}>Análisis Fundamental</h2>
             <span style={{ fontSize: "var(--font-size-xs)", color: "var(--color-text-muted)" }}>— {selectedSymbol}</span>
           </div>
@@ -269,7 +338,7 @@ export function FundamentalAnalysisPanel() {
             <button
               className="btn-primary"
               style={{ fontSize: "var(--font-size-xs)", padding: "0.3rem 1rem" }}
-              onClick={() => analyze({ investmentProfile: profile })}
+              onClick={runFundamentalAnalysis}
             >
               Analizar
             </button>
@@ -287,8 +356,8 @@ export function FundamentalAnalysisPanel() {
             Selecciona un instrumento y ejecuta el análisis
           </p>
           <p style={{ fontSize: "var(--font-size-sm)", margin: 0 }}>
-            Presiona <strong>Analizar</strong> para obtener métricas financieras, valuación y escenarios P&L.
-            {!selectedStrike && (
+            Ejecuta el análisis con las métricas fundamentales predeterminadas. La simulación llenará la tabla de confluencia con filas fundamentales.
+            {!selectedStrike && !optionStrategyAnalysis && (
               <span style={{ display: "block", marginTop: "var(--space-xs)", color: "var(--color-warning)" }}>
                 Selecciona un strike en la Cadena de Opciones para ver escenarios P&L.
               </span>
@@ -347,7 +416,7 @@ export function FundamentalAnalysisPanel() {
           <button
             className="btn-primary"
             style={{ fontSize: "var(--font-size-xs)", padding: "0.3rem 1rem" }}
-            onClick={() => analyze({ investmentProfile: profile })}
+            onClick={runFundamentalAnalysis}
           >
             Reintentar
           </button>
@@ -427,12 +496,18 @@ export function FundamentalAnalysisPanel() {
           <button
             className="btn-primary"
             style={{ fontSize: "var(--font-size-xs)", padding: "0.3rem 1rem" }}
-            onClick={() => analyze({ investmentProfile: profile })}
+            onClick={runFundamentalAnalysis}
           >
             Analizar
           </button>
         </div>
       </div>
+
+      {data.projection && (
+        <div style={{ marginBottom: "var(--space-md)" }}>
+          <ProjectionSimulationPanel projection={data.projection} />
+        </div>
+      )}
 
       {/* ── Score cards row ────────────────────────────────────────────── */}
       <div style={{
@@ -530,7 +605,7 @@ export function FundamentalAnalysisPanel() {
       </div>
 
       {/* ── P&L Scenarios (only if strike selected + options result) ─── */}
-      {optionsResult && selectedStrike && (
+      {displayedOptionsResult && (selectedStrike || optionStrategyAnalysis) && (
         <div style={{
           borderTop: "1px solid var(--color-border-subtle)",
           paddingTop: "var(--space-md)",
@@ -548,9 +623,9 @@ export function FundamentalAnalysisPanel() {
             }}>Escenarios P&L</p>
             <span style={{
               fontSize: "var(--font-size-xs)",
-              color: selectedStrike.type === "call" ? "var(--color-buy)" : "var(--color-sell)",
+              color: (selectedStrike?.type ?? (optionStrategyAnalysis?.strategy.endsWith("CALL") ? "call" : "put")) === "call" ? "var(--color-buy)" : "var(--color-sell)",
             }}>
-              {selectedStrike.type.toUpperCase()} @ ${selectedStrike.strike} · Prima ${selectedStrike.premium.toFixed(2)}
+              {(selectedStrike?.type ?? (optionStrategyAnalysis?.strategy.endsWith("CALL") ? "call" : "put")).toUpperCase()} @ ${Number(selectedStrike?.strike ?? optionStrategyAnalysis?.params.strikePrice ?? 0).toFixed(2)} · Prima ${Number(selectedStrike?.premium ?? optionStrategyAnalysis?.params.premium ?? 0).toFixed(2)}
             </span>
             {/* Break-even */}
             <span style={{
@@ -558,7 +633,7 @@ export function FundamentalAnalysisPanel() {
               fontSize: "var(--font-size-xs)",
               color: "var(--color-text-muted)",
             }}>
-              Break-even: <strong style={{ color: "var(--color-text)" }}>${optionsResult.breakEvenPrice.toFixed(2)}</strong>
+              Break-even: <strong style={{ color: "var(--color-text)" }}>${displayedOptionsResult.breakEvenPrice.toFixed(2)}</strong>
             </span>
           </div>
 
@@ -573,19 +648,19 @@ export function FundamentalAnalysisPanel() {
             <span>
               Máx. Ganancia:{" "}
               <strong style={{ color: "var(--color-buy)" }}>
-                {optionsResult.maxProfit === null || optionsResult.maxProfit === Infinity ? "∞ Ilimitada" : `$${optionsResult.maxProfit.toFixed(2)}`}
+                {displayedOptionsResult.maxProfit === null || displayedOptionsResult.maxProfit === Infinity ? "∞ Ilimitada" : `$${displayedOptionsResult.maxProfit.toFixed(2)}`}
               </strong>
             </span>
             <span>
               Máx. Pérdida:{" "}
               <strong style={{ color: "var(--color-sell)" }}>
-                {optionsResult.maxLoss === null || optionsResult.maxLoss === Infinity ? "∞ Ilimitada" : `$${optionsResult.maxLoss.toFixed(2)}`}
+                {displayedOptionsResult.maxLoss === null || displayedOptionsResult.maxLoss === Infinity ? "∞ Ilimitada" : `$${displayedOptionsResult.maxLoss.toFixed(2)}`}
               </strong>
             </span>
             <span>
               Prob. ITM:{" "}
               <strong style={{ color: "var(--color-text)" }}>
-                {(optionsResult.probabilityItm * 100).toFixed(1)}%
+                {(displayedOptionsResult.probabilityItm * 100).toFixed(1)}%
               </strong>
             </span>
           </div>
@@ -593,17 +668,17 @@ export function FundamentalAnalysisPanel() {
           {/* Scenario cards */}
           <div style={{ display: "flex", gap: "var(--space-sm)" }}>
             <ScenarioCard
-              scenario={optionsResult.scenarioPlus5}
+              scenario={displayedOptionsResult.scenarioPlus5}
               icon="▲"
               accent="var(--color-buy)"
             />
             <ScenarioCard
-              scenario={optionsResult.scenarioAtm}
+              scenario={displayedOptionsResult.scenarioAtm}
               icon="═"
               accent="var(--color-hold)"
             />
             <ScenarioCard
-              scenario={optionsResult.scenarioMinus5}
+              scenario={displayedOptionsResult.scenarioMinus5}
               icon="▼"
               accent="var(--color-sell)"
             />
@@ -612,7 +687,7 @@ export function FundamentalAnalysisPanel() {
       )}
 
       {/* ── Strike not selected hint ──────────────────────────────────── */}
-      {!selectedStrike && (
+      {!selectedStrike && !optionStrategyAnalysis && (
         <div style={{
           borderTop: "1px solid var(--color-border-subtle)",
           paddingTop: "var(--space-md)",

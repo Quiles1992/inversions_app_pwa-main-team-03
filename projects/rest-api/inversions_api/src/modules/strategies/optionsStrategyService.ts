@@ -1,4 +1,4 @@
-import type { OptionStrategyContract, OptionStrategyResult, OptionStrategyInput } from "./optionsStrategyContract";
+import type { OptionStrategyContract, OptionStrategyResult, OptionStrategyInput, OptionStrategyOutput } from "./optionsStrategyContract";
 import { calculateLongCallResult } from "./options/longCall";
 import { calculateLongPutResult } from "./options/longPut";
 import { calculateShortCallResult } from "./options/shortCall";
@@ -32,7 +32,7 @@ export function buildOptionStrategyResult(
  */
 export function buildOptionStrategyCandidates(
   baseParams: OptionStrategyContract
-): OptionStrategyResult[] {
+): OptionStrategyOutput[] {
   const normalizedParams: OptionStrategyInput = normalizeOptionStrategyInput(baseParams);
 
   const longCall = evaluateLongCall({ ...normalizedParams, optionType: "CALL", direction: "LONG" });
@@ -40,11 +40,10 @@ export function buildOptionStrategyCandidates(
   const shortCall = evaluateShortCall({ ...normalizedParams, optionType: "CALL", direction: "SHORT" });
   const shortPut = evaluateShortPut({ ...normalizedParams, optionType: "PUT", direction: "SHORT" });
 
-  // Add ticker and direction to each result (evaluateLongCall returns OptionStrategyOutput)
   return [
-    { ...longCall, ticker: baseParams.ticker, direction: "LONG" as any, optionType: "CALL" as any } as OptionStrategyResult,
-    { ...longPut, ticker: baseParams.ticker, direction: "LONG" as any, optionType: "PUT" as any } as OptionStrategyResult,
-    { ...shortCall, ticker: baseParams.ticker, direction: "SHORT" as any, optionType: "CALL" as any } as OptionStrategyResult,
-    { ...shortPut, ticker: baseParams.ticker, direction: "SHORT" as any, optionType: "PUT" as any } as OptionStrategyResult
+    { ...longCall, ticker: baseParams.ticker, direction: "LONG", optionType: "CALL" },
+    { ...longPut, ticker: baseParams.ticker, direction: "LONG", optionType: "PUT" },
+    { ...shortCall, ticker: baseParams.ticker, direction: "SHORT", optionType: "CALL" },
+    { ...shortPut, ticker: baseParams.ticker, direction: "SHORT", optionType: "PUT" }
   ];
 }

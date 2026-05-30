@@ -3,6 +3,7 @@
 
 import { getAuthHeaders } from "../signals/signalApi";
 import { getCached, setCache } from "../apiCache";
+import type { ConfluenceSignalRow } from "../signals/confluenceTableApi";
 
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes / 5 minutos
 
@@ -18,6 +19,7 @@ export interface FundamentalAnalysisRequest {
   comparisons?: string[];
   projectionFrom?: string;
   projectionTo?: string;
+  currentPrice?: number;
 }
 
 export interface OptionsCalculateRequest {
@@ -46,6 +48,46 @@ export interface PriceScenario {
   priceAtScenario: number;
   profitLoss: number;
   roi: number;
+}
+
+export interface ProjectionPoint {
+  date: string;
+  basePrice: number;
+  bullishPrice: number;
+  bearishPrice: number;
+  basePnL: number;
+  bullishPnL: number;
+  bearishPnL: number;
+}
+
+export interface StrategyScenario {
+  label: "ATM" | "+5%" | "-5%";
+  price: number;
+  profitLoss: number;
+}
+
+export interface FundamentalProjection {
+  ticker: string;
+  strategy: string;
+  verdict: "VIABLE" | "MARGINAL" | "NO_VIABLE";
+  score: number;
+  projectionFrom: string;
+  projectionTo: string;
+  days: number;
+  initialPrice: number;
+  expectedMove: number;
+  expectedMovePercent: number;
+  strike: number;
+  premium: number;
+  breakeven: number;
+  maxLoss: number | "ILIMITADO";
+  maxProfit: number | "ILIMITADO";
+  scenarios: StrategyScenario[];
+  path: ProjectionPoint[];
+  drivers: string[];
+  changeTriggers: string[];
+  calculationSteps: string[];
+  disclaimer: string;
 }
 
 export interface OptionStrategyResult {
@@ -98,10 +140,10 @@ export interface FundamentalAnalysisResponse {
   overallScore: number;
   verdict: string;
   recommendation: unknown;
-  projection: unknown;
+  projection: FundamentalProjection;
   aiAnalysis: unknown;
   sections: unknown;
-  confluenceRows: unknown;
+  confluenceRows: ConfluenceSignalRow[];
   fundamentalData: FundamentalData;
   timestamp: string;
 }
@@ -114,7 +156,15 @@ export async function postFundamentalAnalysis(
   params: FundamentalAnalysisRequest,
   signal?: AbortSignal
 ): Promise<FundamentalAnalysisResponse> {
-  const cacheKey = `fundamental:analyze:${params.ticker}:${params.investmentProfile ?? "Value"}:${params.strategy ?? "Long Call"}`;
+  const cacheKey = [
+    "fundamental:analyze",
+    params.ticker,
+    params.investmentProfile ?? "Value",
+    params.strategy ?? "Long Call",
+    params.currentPrice ?? "auto",
+    params.projectionFrom ?? "from-auto",
+    params.projectionTo ?? "to-auto",
+  ].join(":");
   const cached = getCached<FundamentalAnalysisResponse>(cacheKey);
   if (cached) return cached;
 

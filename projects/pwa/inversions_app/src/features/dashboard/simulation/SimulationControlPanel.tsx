@@ -16,6 +16,12 @@ import {
 } from "../../../services/signals/confluenceTableApi";
 import { TermStrategyModal, type TermStrategyParams } from "./TermStrategyModal";
 import { CoverageParamsModal, type CoverageModalParams } from "./CoverageParamsModal";
+import {
+  OptionStrategyParamsModal,
+  OPTION_STRATEGY_OPTIONS,
+  type CoreOptionStrategy,
+  type OptionStrategyAnalysis,
+} from "./OptionStrategyParamsModal";
 
 // ─── Panel CSS ─────────────────────────────────────────────────────────────────
 // Uses only real Revolut design-system tokens from tokens.css.
@@ -442,8 +448,10 @@ function ChipButton({
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
 const TERM_STRATEGIES = new Set(["CALENDAR_SPREAD", "DIAGONAL_SPREAD"]);
+const CORE_OPTION_STRATEGIES = new Set<string>(["LONG_CALL", "LONG_PUT", "SHORT_CALL", "SHORT_PUT"]);
 function isTermStrategy(e: string)     { return TERM_STRATEGIES.has(e); }
 function isCoverageStrategy(e: string) { return e === "COVERED_CALL"; }
+function isCoreOptionStrategy(e: string): e is CoreOptionStrategy { return CORE_OPTION_STRATEGIES.has(e); }
 
 const DEFAULT_TERM_PARAMS: TermStrategyParams = {
   optionStyle: "CALL",
@@ -469,9 +477,10 @@ const TIMEFRAMES: Array<"1m" | "5m" | "15m" | "1h" | "4h" | "1d"> = ["1m", "5m",
 
 const PRESET_OPTIONS: SelectOption[]    = PRESETS.map((p) => ({ value: p, label: p }));
 const TIMEFRAME_OPTIONS: SelectOption[] = TIMEFRAMES.map((t) => ({ value: t, label: t }));
-const STRATEGY_OPTIONS: SelectOption[]  = CANONICAL_ESTRATEGIAS.map((s) => ({
-  value: s,
-  label: s.replace(/_/g, " "),
+const OPTION_STRATEGY_LABELS = new Map(OPTION_STRATEGY_OPTIONS.map((strategy) => [strategy.value, strategy.label]));
+const STRATEGY_OPTIONS: SelectOption[] = CANONICAL_ESTRATEGIAS.map((strategy) => ({
+  value: strategy,
+  label: OPTION_STRATEGY_LABELS.get(strategy as CoreOptionStrategy) ?? strategy.replace(/_/g, " "),
 }));
 
 function isoToday(): string       { return new Date().toISOString().slice(0, 10); }
@@ -496,6 +505,7 @@ interface Props {
   onExecute?: (activeCoreIds: CoreId[]) => void;
   onStrategyChange?: (estrategia: string) => void;
   onCoverageParamsConfirmed?: (params: CoverageModalParams, kind: string) => void;
+  onOptionStrategyCalculated?: (analysis: OptionStrategyAnalysis) => void;
 }
 
 // ─── Main component ────────────────────────────────────────────────────────────
@@ -505,6 +515,7 @@ export function SimulationControlPanel({
   onExecute,
   onStrategyChange,
   onCoverageParamsConfirmed,
+  onOptionStrategyCalculated,
 }: Props) {
   const [preset, setPreset]               = useState<Preset>("3M");
   const [estrategiaFrom, setEstrategiaFrom] = useState(isoToday());
@@ -524,6 +535,8 @@ export function SimulationControlPanel({
   const [termParams, setTermParams]       = useState<TermStrategyParams>(DEFAULT_TERM_PARAMS);
   const [coverageModalOpen, setCoverageModalOpen] = useState(false);
   const [coverageParams, setCoverageParams]       = useState<CoverageModalParams>(DEFAULT_COVERAGE_PARAMS);
+  const [optionParamsModalOpen, setOptionParamsModalOpen] = useState(false);
+  const [optionParamsStrategy, setOptionParamsStrategy] = useState<CoreOptionStrategy>("LONG_CALL");
 
   useEffect(() => {
     if (!coverageModalOpen || coverageParams.currentPrice > 0) return;
@@ -538,7 +551,13 @@ export function SimulationControlPanel({
   const handleEstrategiaChange = (e: string) => {
     setEstrategia(e);
     onStrategyChange?.(e);
-    if (isTermStrategy(e))     setTermModalOpen(true);
+
+    if (isCoreOptionStrategy(e)) {
+      setOptionParamsStrategy(e);
+      setOptionParamsModalOpen(true);
+    } else if (isTermStrategy(e)) {
+      setTermModalOpen(true);
+    }
     else if (isCoverageStrategy(e)) setCoverageModalOpen(true);
   };
 
@@ -782,6 +801,13 @@ export function SimulationControlPanel({
         onChange={setCoverageParams}
         onClose={() => setCoverageModalOpen(false)}
         onConfirm={(params) => onCoverageParamsConfirmed?.(params, estrategia)}
+      />
+      <OptionStrategyParamsModal
+        open={optionParamsModalOpen}
+        strategy={optionParamsStrategy}
+        ticker={ticket}
+        onClose={() => setOptionParamsModalOpen(false)}
+        onCalculated={onOptionStrategyCalculated}
       />
     </>
   );

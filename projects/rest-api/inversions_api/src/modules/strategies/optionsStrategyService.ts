@@ -12,18 +12,19 @@ import { normalizeOptionStrategyInput } from "./options/optionMath";
 export function buildOptionStrategyResult(
   params: OptionStrategyContract
 ): OptionStrategyResult {
-  const direction = String(params.direction).toLowerCase();
-  const optionType = String(params.optionType).toLowerCase();
+  const normalizedParams = normalizeOptionStrategyInput(params);
+  const direction = normalizedParams.direction;
+  const optionType = normalizedParams.optionType;
 
-  if (direction === "long") {
-    return (optionType === "call"
-      ? calculateLongCallResult(params)
-      : calculateLongPutResult(params)) as unknown as OptionStrategyResult;
+  if (direction === "LONG") {
+    return optionType === "CALL"
+      ? evaluateLongCall(normalizedParams)
+      : evaluateLongPut(normalizedParams);
   }
 
-  return (optionType === "call"
-    ? calculateShortCallResult(params)
-    : calculateShortPutResult(params)) as unknown as OptionStrategyResult;
+  return optionType === "CALL"
+    ? evaluateShortCall(normalizedParams)
+    : evaluateShortPut(normalizedParams);
 }
 
 /**

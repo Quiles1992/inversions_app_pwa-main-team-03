@@ -40,7 +40,7 @@ async function checkOhlcSource(): Promise<DependencyReport> {
   const result = await withTimeout(
     (async (): Promise<DepStatus> => {
       try {
-        const c = await getCandles({ symbol: "AAPL", timeframe: "1h", count: 1 });
+        const c = getCandles({ symbol: "AAPL", timeframe: "1h", count: 1 });
         return c.length > 0 ? "up" : "down";
       } catch {
         return "down";
@@ -122,7 +122,7 @@ indicatorsHealthRouter.get("/health", async (_req, res) => {
 
   let candles: OhlcBar[] = [];
   try {
-    candles = await getCandles({ symbol, timeframe, count: 300 });
+    candles = getCandles({ symbol, timeframe, count: 300 });
   } catch {
     candles = [];
   }

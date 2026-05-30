@@ -11,6 +11,7 @@ import { TimeControls } from "./TimeControls";
 import { ConfluenceSignalsTable } from "./ConfluenceSignalsTable";
 import { SimulationControlPanel } from "./simulation/SimulationControlPanel";
 import { SimulatorStrategySection } from "./simulation/SimulatorStrategySection";
+import { FundamentalAnalysisPanel } from "./FundamentalAnalysisPanel";
 import type { CoverageModalParams } from "./simulation/CoverageParamsModal";
 import { AppShell } from "../../layouts/AppShell";
 import { ActivityBar } from "../../components/ui/ActivityBar";
@@ -426,10 +427,7 @@ export function MainDashboard() {
         title="Análisis Técnico Extendido"
         description="Señales de indicadores técnicos avanzados, patrones de velas y análisis de estructura de mercado."
       />
-      <PlaceholderSection
-        title="Análisis Fundamental"
-        description="Métricas financieras, earnings, valuación y comparativa sectorial."
-      />
+      <FundamentalAnalysisPanel />
       <PlaceholderSection
         title="Noticias y Sentimiento"
         description="Sentimiento del mercado, noticias relevantes y análisis de redes sociales."
